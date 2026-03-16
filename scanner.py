@@ -7,17 +7,17 @@ from typing import Any
 from playwright.async_api import BrowserContext, Page, Request, Response, async_playwright
 
 from extractors.base import Extractor
-from extractors import CookiesExtractor, RequestsExtractor, ThirdPartyExtractor
+from extractors import CookiesExtractor, RequestsExtractor, ThirdPartyExtractor, LocalStorageExtractor, \
+    FacebookPixelExtractor, FailedRequestsExtractor
 from utils import (
     ScanData,
-    local_storage_for_page_url,
     maybe_await,
     parsed_url_dict,
     utc_now_iso,
 )
 
 # Import the extractor classes you want to use here and add them to EXTRACTOR_CLASSES.
-EXTRACTOR_CLASSES: list[type[Extractor]] = [CookiesExtractor, ThirdPartyExtractor, RequestsExtractor]
+EXTRACTOR_CLASSES: list[type[Extractor]] = [CookiesExtractor, LocalStorageExtractor, ThirdPartyExtractor, RequestsExtractor, FailedRequestsExtractor, FacebookPixelExtractor]
 
 
 SCANNER_INIT_SCRIPT = """
@@ -163,12 +163,8 @@ class WebsiteScanner:
         await self._wait_for_network_idle(data)
         self._detach_page_logging(page, data)
         await self._wait_for_event_tasks(data)
-        await self._collect_storage(context, page, data, result)
+        await self._collect_storage(context, data)
         await self._store_final_response(result, data, final_response, page, fallback_url)
-
-        result["request_log"] = data.request_log
-        result["response_log"] = data.response_log
-        result["failed_request_log"] = data.failed_request_log
 
         await self._run_extractors(extractors)
         result["scan_end"] = utc_now_iso()
@@ -182,9 +178,7 @@ class WebsiteScanner:
         fallback_url: str,
     ) -> None:
         if final_response is not None:
-            data.final_response = await self._serialize_response(
-                final_response, include_body=True
-            )
+            data.final_response = await self._serialize_response(final_response)
             result["final_response"] = data.final_response
             result["final_url"] = final_response.url
             return
@@ -290,7 +284,7 @@ class WebsiteScanner:
             "url": request.url,
             "method": request.method,
             "headers": await request.all_headers(),
-            "post_data": request.post_data,
+            # "post_data": request.post_data,
             "resource_type": request.resource_type,
             "frame_url": request.frame.url if request.frame else None,
             "is_navigation_request": request.is_navigation_request(),
@@ -340,12 +334,9 @@ class WebsiteScanner:
     async def _collect_storage(
         self,
         context: BrowserContext,
-        page: Page,
         data: ScanData,
-        result: dict[str, Any],
     ) -> None:
         data.cookies = await context.cookies()
-        result["cookies"] = data.cookies
 
         storage_state = await context.storage_state()
         origins = storage_state.get("origins", [])
@@ -359,9 +350,6 @@ class WebsiteScanner:
             }
             for origin in origins
         ]
-        result["local_storage_by_origin"] = data.local_storage_by_origin
-        data.local_storage = local_storage_for_page_url(page.url, data.local_storage_by_origin)
-        result["local_storage"] = data.local_storage
 
     async def _wait_for_event_tasks(self, data: ScanData) -> None:
         while data.event_tasks:
@@ -369,7 +357,7 @@ class WebsiteScanner:
             await asyncio.gather(*pending_tasks, return_exceptions=True)
 
     async def _serialize_response(
-        self, response: Response, include_body: bool = False
+        self, response: Response
     ) -> dict[str, Any]:
         headers = await response.all_headers()
         try:

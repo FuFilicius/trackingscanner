@@ -52,9 +52,8 @@ def format_overview(result: dict) -> str:
         f"- Final URL: {result.get('final_url', '-')}",
         f"- Reachable: {result.get('reachable', False)}",
         f"- Status: {final_response.get('status', '-')}",
-        f"- Requests: {len(result.get('request_log', []))}",
-        f"- Responses: {len(result.get('response_log', []))}",
-        f"- Failed requests: {len(result.get('failed_request_log', []))}",
+        f"- Requests: {len(result.get('requests', []))}",
+        f"- Failed requests: {len(result.get('failed_requests', []))}",
         f"- Cookies: {len(result.get('cookies', []))}",
         f"- Local storage keys: {len(local_storage)}",
         f"- Started: {result.get('scan_start', '-')}",
@@ -80,11 +79,10 @@ def main() -> None:
 
     result = scan_website(args.url, options=options)
     print(format_overview(result))
-    # print(json.dumps(result["request_log"], indent=2))
-    # print(json.dumps(result["response_log"], indent=2))
+    print(json.dumps(result['facebook_pixel'], indent=2))
     print(json.dumps(result['third_parties'], indent=2))
-    print(json.dumps(result["cookies"], indent=2))
-    print(json.dumps(result["requests"], indent=2))
+    # print(json.dumps(result["cookies"], indent=2))
+    # print(json.dumps(result["requests"], indent=2))
 
 
 if __name__ == "__main__":
