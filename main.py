@@ -67,6 +67,23 @@ def format_overview(result: dict) -> str:
     return "\n".join(lines)
 
 
+def format_requested_urls(result: dict) -> str:
+    requests = result.get("requests") or []
+    lines = ["Requested URLs"]
+
+    for request in requests:
+        if not isinstance(request, dict):
+            continue
+        url = request.get("url")
+        if url:
+            lines.append(f"- {url}")
+
+    if len(lines) == 1:
+        lines.append("- (none)")
+
+    return "\n".join(lines)
+
+
 def main() -> None:
     args = parse_args()
     options = {
@@ -79,10 +96,12 @@ def main() -> None:
 
     result = scan_website(args.url, options=options)
     print(format_overview(result))
-    print(json.dumps(result['facebook_pixel'], indent=2))
-    print(json.dumps(result['third_parties'], indent=2))
-    # print(json.dumps(result["cookies"], indent=2))
+    print(format_requested_urls(result))
+    # print(json.dumps(result['facebook_pixel'], indent=2))
+    # print(json.dumps(result['third_parties'], indent=2))
+    print(json.dumps(result["cookies"], indent=2))
     # print(json.dumps(result["requests"], indent=2))
+    print(json.dumps(result["fingerprinting"], indent=2))
 
 
 if __name__ == "__main__":

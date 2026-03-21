@@ -2,22 +2,38 @@ from __future__ import annotations
 
 import asyncio
 import time
+from asyncio import timeout
 from typing import Any
 
 from playwright.async_api import BrowserContext, Page, Request, Response, async_playwright
 
 from extractors.base import Extractor
 from extractors import CookiesExtractor, RequestsExtractor, ThirdPartyExtractor, LocalStorageExtractor, \
-    FacebookPixelExtractor, FailedRequestsExtractor
+    FacebookPixelExtractor, TwitterPixelExtractor, TiktokPixelExtractor, FailedRequestsExtractor, SessionRecordersExtractor, \
+    FingerprintingExtractor
 from utils import (
+    FailedRequestLogEntry,
+    RequestLogEntry,
+    ResponseLogEntry,
     ScanData,
     maybe_await,
-    parsed_url_dict,
+    parsed_url_data,
     utc_now_iso,
 )
 
 # Import the extractor classes you want to use here and add them to EXTRACTOR_CLASSES.
-EXTRACTOR_CLASSES: list[type[Extractor]] = [CookiesExtractor, LocalStorageExtractor, ThirdPartyExtractor, RequestsExtractor, FailedRequestsExtractor, FacebookPixelExtractor]
+EXTRACTOR_CLASSES: list[type[Extractor]] = [
+    CookiesExtractor,
+    LocalStorageExtractor,
+    ThirdPartyExtractor,
+    RequestsExtractor,
+    FailedRequestsExtractor,
+    FacebookPixelExtractor,
+    TwitterPixelExtractor,
+    TiktokPixelExtractor,
+    SessionRecordersExtractor,
+    FingerprintingExtractor,
+]
 
 
 SCANNER_INIT_SCRIPT = """
@@ -160,6 +176,7 @@ class WebsiteScanner:
         final_response: Response | None,
         fallback_url: str,
     ) -> None:
+        await asyncio.sleep(5)
         await self._wait_for_network_idle(data)
         self._detach_page_logging(page, data)
         await self._wait_for_event_tasks(data)
@@ -179,7 +196,7 @@ class WebsiteScanner:
     ) -> None:
         if final_response is not None:
             data.final_response = await self._serialize_response(final_response)
-            result["final_response"] = data.final_response
+            result["final_response"] = data.final_response.to_dict()
             result["final_url"] = final_response.url
             return
 
@@ -252,8 +269,8 @@ class WebsiteScanner:
             await maybe_await(extractor.extract_information())
 
     async def _wait_for_network_idle(self, data: ScanData) -> None:
-        idle_for_ms = int(self.options.get("network_idle_ms", 1000))
-        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 5000))
+        idle_for_ms = int(self.options.get("network_idle_ms", 2000))
+        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 10000))
         poll_interval_ms = int(self.options.get("network_idle_poll_interval_ms", 100))
 
         if idle_for_ms <= 0:
@@ -278,19 +295,45 @@ class WebsiteScanner:
 
     async def _log_request(self, request: Request, data: ScanData) -> None:
         request_id = self._request_id(request)
-        request_entry = {
-            "timestamp": utc_now_iso(),
-            "request_id": request_id,
-            "url": request.url,
-            "method": request.method,
-            "headers": await request.all_headers(),
-            # "post_data": request.post_data,
-            "resource_type": request.resource_type,
-            "frame_url": request.frame.url if request.frame else None,
-            "is_navigation_request": request.is_navigation_request(),
-            "parsed_url": parsed_url_dict(request.url),
-        }
+        headers = await request.all_headers()
+        body, body_json = self._extract_post_body(request)
+
+        request_entry = RequestLogEntry(
+            timestamp=utc_now_iso(),
+            request_id=request_id,
+            url=request.url,
+            method=request.method,
+            headers=headers,
+            resource_type=request.resource_type,
+            frame_url=request.frame.url if request.frame else None,
+            is_navigation_request=request.is_navigation_request(),
+            parsed_url=parsed_url_data(request.url),
+            body=body,
+            body_json=body_json,
+        )
         data.request_log[request_id] = request_entry
+
+    @staticmethod
+    def _extract_post_body(
+        request: Request,
+    ) -> tuple[str | None, Any | None]:
+        if request.method.upper() != "POST":
+            return None, None
+
+        try:
+            body = request.post_data
+        except Exception:
+            return None, None
+
+        if not body:
+            return None, None
+
+        try:
+            body_json = request.post_data_json
+        except Exception:
+            body_json = None
+
+        return body, body_json
 
     async def _log_response(self, response: Response, data: ScanData) -> None:
         request_id = self._request_id(response.request)
@@ -300,36 +343,36 @@ class WebsiteScanner:
         except Exception:
             security_details = None
 
-        response_entry = {
-            "timestamp": utc_now_iso(),
-            "request_id": request_id,
-            "url": response.url,
-            "status": response.status,
-            "status_text": response.status_text,
-            "headers": headers,
-            "headers_lower": {key.lower(): value for key, value in headers.items()},
-            "resource_type": response.request.resource_type,
-            "request_method": response.request.method,
-            "frame_url": response.frame.url if response.frame else None,
-            "security_details": security_details,
-            "from_service_worker": response.from_service_worker,
-        }
+        response_entry = ResponseLogEntry(
+            timestamp=utc_now_iso(),
+            request_id=request_id,
+            url=response.url,
+            status=response.status,
+            status_text=response.status_text,
+            headers=headers,
+            headers_lower={key.lower(): value for key, value in headers.items()},
+            resource_type=response.request.resource_type,
+            request_method=response.request.method,
+            frame_url=response.frame.url if response.frame else None,
+            security_details=security_details,
+            from_service_worker=response.from_service_worker,
+        )
 
         data.response_log[request_id] = response_entry
 
     def _log_failed_request(self, request: Request, data: ScanData) -> None:
         request_id = self._request_id(request)
         failure = request.failure
-        data.failed_request_log[request_id] = {
-            "timestamp": utc_now_iso(),
-            "request_id": request_id,
-            "url": request.url,
-            "method": request.method,
-            "resource_type": request.resource_type,
-            "frame_url": request.frame.url if request.frame else None,
-            "error_text": failure if failure else None,
-            "parsed_url": parsed_url_dict(request.url),
-        }
+        data.failed_request_log[request_id] = FailedRequestLogEntry(
+            timestamp=utc_now_iso(),
+            request_id=request_id,
+            url=request.url,
+            method=request.method,
+            resource_type=request.resource_type,
+            frame_url=request.frame.url if request.frame else None,
+            error_text=failure if failure else None,
+            parsed_url=parsed_url_data(request.url),
+        )
 
     async def _collect_storage(
         self,
@@ -358,29 +401,27 @@ class WebsiteScanner:
 
     async def _serialize_response(
         self, response: Response
-    ) -> dict[str, Any]:
+    ) -> ResponseLogEntry:
         headers = await response.all_headers()
         try:
             security_details = await response.security_details()
         except Exception:
             security_details = None
 
-        payload = {
-            "timestamp": utc_now_iso(),
-            "request_id": self._request_id(response.request),
-            "url": response.url,
-            "status": response.status,
-            "status_text": response.status_text,
-            "headers": headers,
-            "headers_lower": {key.lower(): value for key, value in headers.items()},
-            "resource_type": response.request.resource_type,
-            "request_method": response.request.method,
-            "frame_url": response.frame.url if response.frame else None,
-            "security_details": security_details,
-            "from_service_worker": response.from_service_worker,
-        }
-
-        return payload
+        return ResponseLogEntry(
+            timestamp=utc_now_iso(),
+            request_id=self._request_id(response.request),
+            url=response.url,
+            status=response.status,
+            status_text=response.status_text,
+            headers=headers,
+            headers_lower={key.lower(): value for key, value in headers.items()},
+            resource_type=response.request.resource_type,
+            request_method=response.request.method,
+            frame_url=response.frame.url if response.frame else None,
+            security_details=security_details,
+            from_service_worker=response.from_service_worker,
+        )
 
     def _create_event_task(self, data: ScanData, coroutine: Any) -> None:
         task = asyncio.create_task(coroutine)

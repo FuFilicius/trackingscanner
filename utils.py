@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import inspect
-from dataclasses import field, dataclass
+from dataclasses import asdict, field, dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
@@ -12,14 +12,86 @@ from tldextract import TLDExtract
 
 
 @dataclass
+class ParsedUrl:
+    scheme: str
+    netloc: str
+    path: str
+    params: str
+    query: str
+    fragment: str
+    hostname: str | None
+    port: int | None
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class RequestLogEntry:
+    timestamp: str
+    request_id: str
+    url: str
+    method: str
+    headers: dict[str, str]
+    resource_type: str
+    frame_url: str | None
+    is_navigation_request: bool
+    parsed_url: ParsedUrl
+    body: str | None = None
+    body_json: Any | None = None
+    is_thirdparty: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["parsed_url"] = self.parsed_url.to_dict()
+        return payload
+
+
+@dataclass
+class ResponseLogEntry:
+    timestamp: str
+    request_id: str
+    url: str
+    status: int
+    status_text: str
+    headers: dict[str, str]
+    headers_lower: dict[str, str]
+    resource_type: str
+    request_method: str
+    frame_url: str | None
+    security_details: Any
+    from_service_worker: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        return asdict(self)
+
+
+@dataclass
+class FailedRequestLogEntry:
+    timestamp: str
+    request_id: str
+    url: str
+    method: str
+    resource_type: str
+    frame_url: str | None
+    error_text: Any | None
+    parsed_url: ParsedUrl
+
+    def to_dict(self) -> dict[str, Any]:
+        payload = asdict(self)
+        payload["parsed_url"] = self.parsed_url.to_dict()
+        return payload
+
+
+@dataclass
 class ScanData:
     page: Page
     context: BrowserContext
-    request_log: dict[str, dict[str, Any]] = field(default_factory=dict)
-    response_log: dict[str, dict[str, Any]] = field(default_factory=dict)
-    failed_request_log: dict[str, dict[str, Any]] = field(default_factory=dict)
+    request_log: dict[str, RequestLogEntry] = field(default_factory=dict)
+    response_log: dict[str, ResponseLogEntry] = field(default_factory=dict)
+    failed_request_log: dict[str, FailedRequestLogEntry] = field(default_factory=dict)
     cookies: list[Cookie] = field(default_factory=list)
-    final_response: dict[str, Any] | None = None
+    final_response: ResponseLogEntry | None = None
     local_storage: dict[str, Any] = field(default_factory=dict)
     local_storage_by_origin: list[dict[str, Any]] = field(default_factory=list)
     event_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
@@ -40,25 +112,25 @@ async def maybe_await(value: Any) -> Any:
     return value
 
 
-def parsed_url_dict(url: str) -> dict[str, Any]:
+def parsed_url_data(url: str) -> ParsedUrl:
     parsed = urlparse(url)
-    return {
-        "scheme": parsed.scheme,
-        "netloc": parsed.netloc,
-        "path": parsed.path,
-        "params": parsed.params,
-        "query": parsed.query,
-        "fragment": parsed.fragment,
-        "hostname": parsed.hostname,
-        "port": parsed.port,
-    }
+    return ParsedUrl(
+        scheme=parsed.scheme,
+        netloc=parsed.netloc,
+        path=parsed.path,
+        params=parsed.params,
+        query=parsed.query,
+        fragment=parsed.fragment,
+        hostname=parsed.hostname,
+        port=parsed.port,
+    )
 
 
 def origin_from_url(url: str) -> str | None:
     parsed = urlparse(url)
-    if not parsed.scheme or not parsed.netloc:
+    if not parsed.scheme or not parsed.hostname:
         return None
-    return f"{parsed.scheme}://{parsed.netloc}"
+    return f"{parsed.scheme}://{parsed.hostname}"
 
 
 def local_storage_for_page_url(
@@ -79,7 +151,7 @@ def local_storage_for_page_url(
 
 def get_corresponding_response(
         request_id: str, data: ScanData
-) -> dict[str, Any] | None:
+) -> ResponseLogEntry | None:
     return data.response_log.get(request_id)
 
 parse_domain = TLDExtract()

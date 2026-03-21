@@ -14,9 +14,9 @@ class FacebookPixelExtractor(Extractor):
         events_found = set()
 
         for request in self.data.request_log.values():
-            netloc = request['parsed_url']['netloc']
-            path = request['parsed_url']['path']
-            query = parse_qs(request['parsed_url']['query'])
+            netloc = request.parsed_url.netloc.lower()
+            path = request.parsed_url.path.lower()
+            query = parse_qs(request.parsed_url.query)
             ev = query.get('ev', [None])[0]
 
             if 'facebook' in netloc and path in {'/tr', '/tr/'} and ev:

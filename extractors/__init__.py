@@ -2,5 +2,9 @@ from .cookies import CookiesExtractor
 from .requests import RequestsExtractor
 from .thirdparties import ThirdPartyExtractor
 from .localstorage import LocalStorageExtractor
-from .fb_pixel import FacebookPixelExtractor
+from .fbpixel import FacebookPixelExtractor
+from .twitterpixel import TwitterPixelExtractor
+from .tiktokpixel import TiktokPixelExtractor
 from .failedrequests import FailedRequestsExtractor
+from .sessionrecorders import SessionRecordersExtractor
+from .fingerprinting import FingerprintingExtractor
