@@ -31,16 +31,15 @@ class ThirdPartyExtractor(Extractor):
             else:
                 num_https_requests += 1
 
-
-        for cookie in self.result['cookies']:
-            cookie['is_thirdparty'] = False
-            domain = cookie['domain']
+        for cookie in self.data.cookies:
+            cookie.is_thirdparty = False
+            domain = cookie.domain
             if domain.startswith('.'):
                 domain = domain[1:]
             domain = parse_domain(domain).top_domain_under_public_suffix
             if domain in first_party_domains:
                 continue
-            cookie['is_thirdparty'] = True
+            cookie.is_thirdparty = True
             num_cookies += 1
 
         third_parties: dict[str, Any] = {

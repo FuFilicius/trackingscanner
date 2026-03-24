@@ -47,17 +47,23 @@ INSTRUMENTATION_JS = """
         };
     }
 
-    function instrumentProperty(obj, prop, name, logType) {
+    function getPropertyDescriptor(obj, prop) {
         let prototype = obj;
         let descriptor;
 
         do {
             descriptor = Object.getOwnPropertyDescriptor(prototype, prop);
             if (typeof descriptor !== "undefined") {
-                break;
+                return descriptor;
             }
             prototype = Object.getPrototypeOf(prototype);
         } while (prototype !== null);
+
+        return undefined;
+    }
+
+    function instrumentProperty(obj, prop, name, logType) {
+        const descriptor = getPropertyDescriptor(obj, prop);
 
         if (typeof descriptor === "undefined") {
             return;
@@ -107,17 +113,28 @@ INSTRUMENTATION_JS = """
 
         for (let i = 0; i < properties.length; i++) {
             const prop = properties[i];
+            const descriptor = getPropertyDescriptor(obj, prop);
+            if (!descriptor) {
+                continue;
+            }
 
-            if (typeof obj[prop] === "function") {
-                obj[prop] = instrumentFunction(obj[prop], name + "." + prop, logType);
-            } else {
-                instrumentProperty(obj, prop, name + "." + prop, logType);
+            try {
+                if (typeof descriptor.value === "function") {
+                    obj[prop] = instrumentFunction(descriptor.value, name + "." + prop, logType);
+                } else {
+                    instrumentProperty(obj, prop, name + "." + prop, logType);
+                }
+            } catch (error) {
+                // Ignore single-hook failures to keep remaining instrumentation active.
             }
         }
     }
 
-    if (window.__websiteScanner && typeof window.__websiteScanner.set === "function") {
-        window.__websiteScanner.set("fingerprinting_logs", []);
+    if (window.__websiteScanner && typeof window.__websiteScanner.get === "function" && typeof window.__websiteScanner.set === "function") {
+        const existingLogs = window.__websiteScanner.get("fingerprinting_logs");
+        if (!Array.isArray(existingLogs)) {
+            window.__websiteScanner.set("fingerprinting_logs", []);
+        }
     }
 
     instrumentObject(
@@ -161,7 +178,6 @@ class FingerprintingExtractor(Extractor):
         canvas = {"calls": [], "is_fingerprinting": False}
         webgl = {"calls": [], "have_webGL": False}
         webrtc = {"calls": [], "have_webRTC": False}
-        font = {"calls": [], "have_font_fingerprinting": False}
 
         canvas_text_methods = {
             "CanvasRenderingContext2D.fillText",
@@ -257,5 +273,3 @@ class FingerprintingExtractor(Extractor):
             return []
 
         return [entry for entry in logs if isinstance(entry, dict)]
-
-

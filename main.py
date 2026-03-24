@@ -96,12 +96,13 @@ def main() -> None:
 
     result = scan_website(args.url, options=options)
     print(format_overview(result))
-    print(format_requested_urls(result))
+    # print(format_requested_urls(result))
     # print(json.dumps(result['facebook_pixel'], indent=2))
     # print(json.dumps(result['third_parties'], indent=2))
-    print(json.dumps(result["cookies"], indent=2))
+    # print(json.dumps(result["cookies"], indent=2))
     # print(json.dumps(result["requests"], indent=2))
-    print(json.dumps(result["fingerprinting"], indent=2))
+    # print(json.dumps(result["fingerprinting"], indent=2))
+    print(json.dumps(result["trackers"], indent=2))
 
 
 if __name__ == "__main__":

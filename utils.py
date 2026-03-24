@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import BrowserContext, Page, Cookie
+from playwright.async_api import BrowserContext, Page
 from tldextract import TLDExtract
 
 
@@ -40,6 +40,7 @@ class RequestLogEntry:
     body: str | None = None
     body_json: Any | None = None
     is_thirdparty: bool = False
+    is_tracker: bool = False
 
     def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
@@ -84,13 +85,60 @@ class FailedRequestLogEntry:
 
 
 @dataclass
+class CookieEntry:
+    name: str
+    value: str
+    domain: str
+    path: str
+    expires: float
+    http_only: bool
+    secure: bool
+    same_site: str | None
+    is_thirdparty: bool = False
+    is_tracker: bool = False
+    lifetime: int = -1
+
+    @classmethod
+    def from_playwright_cookie(cls, cookie: dict[str, Any]) -> "CookieEntry":
+        return cls(
+            name=str(cookie.get("name", "")),
+            value=str(cookie.get("value", "")),
+            domain=str(cookie.get("domain", "")),
+            path=str(cookie.get("path", "/")),
+            expires=float(cookie.get("expires", -1)),
+            http_only=bool(cookie.get("httpOnly", False)),
+            secure=bool(cookie.get("secure", False)),
+            same_site=(
+                str(cookie.get("sameSite"))
+                if cookie.get("sameSite") is not None
+                else None
+            ),
+        )
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "name": self.name,
+            "value": self.value,
+            "domain": self.domain,
+            "path": self.path,
+            "expires": self.expires,
+            "httpOnly": self.http_only,
+            "secure": self.secure,
+            "sameSite": self.same_site,
+            "is_thirdparty": self.is_thirdparty,
+            "is_tracker": self.is_tracker,
+            "lifetime": self.lifetime,
+        }
+
+
+@dataclass
 class ScanData:
     page: Page
     context: BrowserContext
     request_log: dict[str, RequestLogEntry] = field(default_factory=dict)
     response_log: dict[str, ResponseLogEntry] = field(default_factory=dict)
     failed_request_log: dict[str, FailedRequestLogEntry] = field(default_factory=dict)
-    cookies: list[Cookie] = field(default_factory=list)
+    cookies: list[CookieEntry] = field(default_factory=list)
     final_response: ResponseLogEntry | None = None
     local_storage: dict[str, Any] = field(default_factory=dict)
     local_storage_by_origin: list[dict[str, Any]] = field(default_factory=list)

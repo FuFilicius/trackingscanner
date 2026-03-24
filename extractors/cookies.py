@@ -11,11 +11,11 @@ class CookiesExtractor(Extractor):
         ).timestamp()
 
         for cookie in cookies:
-            expires = cookie.get("expires")
-            cookie["lifetime"] = (
+            expires = cookie.expires
+            cookie.lifetime = (
                 int(expires - scan_start_epoch)
                 if isinstance(expires, (int, float)) and expires > 0
                 else -1
             )
 
-        self.result["cookies"] = cookies
+        self.result["cookies"] = [cookie.to_dict() for cookie in cookies]

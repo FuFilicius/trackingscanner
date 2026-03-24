@@ -23,6 +23,7 @@ class RequestsExtractor(Extractor):
             }
 
             request_dict['is_thirdparty'] = request.is_thirdparty
+            request_dict['is_tracker'] = request.is_tracker
 
             requests.append(request_dict)
 

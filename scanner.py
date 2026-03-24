@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from asyncio import timeout
 from typing import Any
 
 from playwright.async_api import BrowserContext, Page, Request, Response, async_playwright
@@ -10,8 +9,9 @@ from playwright.async_api import BrowserContext, Page, Request, Response, async_
 from extractors.base import Extractor
 from extractors import CookiesExtractor, RequestsExtractor, ThirdPartyExtractor, LocalStorageExtractor, \
     FacebookPixelExtractor, TwitterPixelExtractor, TiktokPixelExtractor, FailedRequestsExtractor, SessionRecordersExtractor, \
-    FingerprintingExtractor
+    FingerprintingExtractor, TrackerExtractor
 from utils import (
+    CookieEntry,
     FailedRequestLogEntry,
     RequestLogEntry,
     ResponseLogEntry,
@@ -23,9 +23,10 @@ from utils import (
 
 # Import the extractor classes you want to use here and add them to EXTRACTOR_CLASSES.
 EXTRACTOR_CLASSES: list[type[Extractor]] = [
+    ThirdPartyExtractor,
+    TrackerExtractor,
     CookiesExtractor,
     LocalStorageExtractor,
-    ThirdPartyExtractor,
     RequestsExtractor,
     FailedRequestsExtractor,
     FacebookPixelExtractor,
@@ -379,7 +380,8 @@ class WebsiteScanner:
         context: BrowserContext,
         data: ScanData,
     ) -> None:
-        data.cookies = await context.cookies()
+        raw_cookies = await context.cookies()
+        data.cookies = [CookieEntry.from_playwright_cookie(dict(cookie)) for cookie in raw_cookies]
 
         storage_state = await context.storage_state()
         origins = storage_state.get("origins", [])

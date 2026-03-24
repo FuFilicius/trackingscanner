@@ -8,3 +8,4 @@ from .tiktokpixel import TiktokPixelExtractor
 from .failedrequests import FailedRequestsExtractor
 from .sessionrecorders import SessionRecordersExtractor
 from .fingerprinting import FingerprintingExtractor
+from .trackerdetect import TrackerExtractor
