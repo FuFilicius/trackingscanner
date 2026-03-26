@@ -2,15 +2,18 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import datetime, timezone
+from pathlib import Path
 
-from scanner import scan_website
+from scanner import scan_websites
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run a website scan with Playwright.")
+    parser = argparse.ArgumentParser(description="Run website scans with Playwright.")
     parser.add_argument(
-        "url",
-        help="Target URL to scan, e.g. https://example.com"
+        "urls",
+        nargs="+",
+        help="One or more target URLs to scan, e.g. https://example.com",
     )
     parser.add_argument(
         "--headed",
@@ -45,6 +48,23 @@ def parse_args() -> argparse.Namespace:
 def format_overview(result: dict) -> str:
     final_response = result.get("final_response") or {}
     local_storage = result.get("local_storage") or {}
+    requests_value = result.get("requests")
+    if isinstance(requests_value, dict):
+        request_count = requests_value.get("total", 0)
+        set_cookie_count = requests_value.get("set_cookie", 0)
+    else:
+        request_count = len(requests_value or [])
+        set_cookie_count = 0
+
+    cookies_value = result.get("cookies")
+    if isinstance(cookies_value, dict):
+        cookie_count = cookies_value.get("total", 0)
+        session_cookie_count = cookies_value.get("session", 0)
+        persistent_cookie_count = cookies_value.get("persistent", 0)
+    else:
+        cookie_count = len(cookies_value or [])
+        session_cookie_count = 0
+        persistent_cookie_count = 0
 
     lines = [
         "Scan overview",
@@ -52,9 +72,12 @@ def format_overview(result: dict) -> str:
         f"- Final URL: {result.get('final_url', '-')}",
         f"- Reachable: {result.get('reachable', False)}",
         f"- Status: {final_response.get('status', '-')}",
-        f"- Requests: {len(result.get('requests', []))}",
+        f"- Requests: {request_count}",
+        f"- Requests setting cookies: {set_cookie_count}",
         f"- Failed requests: {len(result.get('failed_requests', []))}",
-        f"- Cookies: {len(result.get('cookies', []))}",
+        f"- Cookies: {cookie_count}",
+        f"- Session cookies: {session_cookie_count}",
+        f"- Persistent cookies: {persistent_cookie_count}",
         f"- Local storage keys: {len(local_storage)}",
         f"- Started: {result.get('scan_start', '-')}",
         f"- Finished: {result.get('scan_end', '-')}",
@@ -67,21 +90,14 @@ def format_overview(result: dict) -> str:
     return "\n".join(lines)
 
 
-def format_requested_urls(result: dict) -> str:
-    requests = result.get("requests") or []
-    lines = ["Requested URLs"]
+def save_results(results: list[dict]) -> Path:
+    output_dir = Path("test-results")
+    output_dir.mkdir(parents=True, exist_ok=True)
 
-    for request in requests:
-        if not isinstance(request, dict):
-            continue
-        url = request.get("url")
-        if url:
-            lines.append(f"- {url}")
-
-    if len(lines) == 1:
-        lines.append("- (none)")
-
-    return "\n".join(lines)
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    output_path = output_dir / f"scan_results_{timestamp}.json"
+    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    return output_path
 
 
 def main() -> None:
@@ -94,15 +110,18 @@ def main() -> None:
         "java_script_enabled": not args.disable_js,
     }
 
-    result = scan_website(args.url, options=options)
+    results = scan_websites(args.urls, options=options)
+    output_path = save_results(results)
+    result = results[0]
     print(format_overview(result))
+    print(f"Saved {len(results)} result(s) to {output_path}")
     # print(format_requested_urls(result))
     # print(json.dumps(result['facebook_pixel'], indent=2))
     # print(json.dumps(result['third_parties'], indent=2))
     # print(json.dumps(result["cookies"], indent=2))
     # print(json.dumps(result["requests"], indent=2))
     # print(json.dumps(result["fingerprinting"], indent=2))
-    print(json.dumps(result["trackers"], indent=2))
+    print(json.dumps(result.get("trackers", []), indent=2))
 
 
 if __name__ == "__main__":

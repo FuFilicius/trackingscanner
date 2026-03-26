@@ -10,7 +10,21 @@ class CookiesExtractor(Extractor):
             timezone.utc
         ).timestamp()
 
+        summary = {
+            "total": 0,
+            "session": 0,
+            "persistent": 0,
+            "http_only": 0,
+            "secure": 0,
+            "thirdparty": 0,
+            "tracker": 0,
+            "same_site": {},
+        }
+        lifetime_sum = 0
+        persistent_count = 0
+
         for cookie in cookies:
+            summary["total"] += 1
             expires = cookie.expires
             cookie.lifetime = (
                 int(expires - scan_start_epoch)
@@ -18,4 +32,23 @@ class CookiesExtractor(Extractor):
                 else -1
             )
 
-        self.result["cookies"] = [cookie.to_dict() for cookie in cookies]
+            if cookie.lifetime >= 0:
+                summary["persistent"] += 1
+                lifetime_sum += cookie.lifetime
+                persistent_count += 1
+            else:
+                summary["session"] += 1
+
+            if cookie.http_only:
+                summary["http_only"] += 1
+            if cookie.secure:
+                summary["secure"] += 1
+            if cookie.is_thirdparty:
+                summary["thirdparty"] += 1
+            if cookie.is_tracker:
+                summary["tracker"] += 1
+
+            same_site = cookie.same_site or "unknown"
+            summary["same_site"][same_site] = summary["same_site"].get(same_site, 0) + 1
+
+        self.result["cookies"] = summary

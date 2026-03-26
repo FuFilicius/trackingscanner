@@ -135,6 +135,3 @@ class TrackerExtractor(Extractor):
 		self.rules = AdblockRules(raw_rules)
 		_adblock_rules_cache = self.rules
 		_adblock_rules_cache_key = cache_key
-
-
-
