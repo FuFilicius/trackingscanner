@@ -6,7 +6,14 @@ from typing import Any
 
 from playwright.async_api import Page, Request, Response
 
-from utils import FailedRequestLogEntry, RequestLogEntry, ResponseLogEntry, ScanData, parsed_url_data, utc_now_iso
+from utils import (
+    FailedRequestLogEntry,
+    RequestLogEntry,
+    ResponseLogEntry,
+    ScanData,
+    parsed_url_data,
+    utc_now_iso,
+)
 
 
 def request_id(request: Request) -> str:

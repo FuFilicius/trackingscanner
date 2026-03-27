@@ -10,6 +10,7 @@ class ThirdPartyExtractor(Extractor):
         num_http_requests = 0
         num_https_requests = 0
         num_cookies = 0
+        third_party_cookie_domains: set[str] = set()
         first_party_domains = set()
         for url in self.result['site_url'], self.result['final_url']:
             extracted = parse_domain(url)
@@ -36,17 +37,20 @@ class ThirdPartyExtractor(Extractor):
             domain = cookie.domain
             if domain.startswith('.'):
                 domain = domain[1:]
-            domain = parse_domain(domain).top_domain_under_public_suffix
-            if domain in first_party_domains:
+            registrable_domain = parse_domain(domain).top_domain_under_public_suffix
+            if registrable_domain in first_party_domains:
                 continue
             cookie.is_thirdparty = True
             num_cookies += 1
+            if domain:
+                third_party_cookie_domains.add(domain)
 
         third_parties: dict[str, Any] = {
             'fqdns': sorted(third_party_fqdns),
             'num_http_requests': num_http_requests,
             'num_https_requests': num_https_requests,
             'num_cookies': num_cookies,
+            'cookie_domains': sorted(third_party_cookie_domains),
         }
 
         self.result['third_parties'] = third_parties

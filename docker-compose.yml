@@ -1,0 +1,7 @@
+services:
+  scanner:
+    build:
+      context: .
+    image: website-scanner:latest
+    volumes:
+      - ./test-results:/app/test-results

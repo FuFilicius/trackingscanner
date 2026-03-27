@@ -154,12 +154,6 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-async def maybe_await(value: Any) -> Any:
-    if inspect.isawaitable(value):
-        return await value
-    return value
-
-
 def parsed_url_data(url: str) -> ParsedUrl:
     parsed = urlparse(url)
     return ParsedUrl(

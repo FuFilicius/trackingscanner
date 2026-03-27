@@ -6,10 +6,15 @@ from typing import Any
 from playwright.async_api import BrowserContext, Page, Response, async_playwright
 
 from extractors.base import Extractor
-from scanner_config import EXTRACTOR_CLASSES, SCANNER_INIT_SCRIPT
-from scanner_extractors import create_extractors, register_extractor_javascript, run_extractors
-from scanner_finalize import collect_storage, store_final_response
-from scanner_network import NetworkCollector
+from scanner_tools.finalize import collect_storage, store_final_response
+from scanner_tools.network import NetworkCollector
+from scanner_tools.extractors import (
+    EXTRACTOR_CLASSES,
+    SCANNER_INIT_SCRIPT,
+    create_extractors,
+    register_extractor_javascript,
+    run_extractors,
+)
 from utils import ScanData, utc_now_iso
 
 
@@ -40,6 +45,7 @@ class WebsiteScanner:
         concurrency = max(1, int(max_concurrency))
         semaphore = asyncio.Semaphore(concurrency)
         results: list[dict[str, Any] | None] = [None] * len(urls)
+        total = len(urls)
 
         async with async_playwright() as playwright:
             browser = await self._launch_browser(playwright)
@@ -63,7 +69,10 @@ class WebsiteScanner:
         return await playwright.chromium.launch(
             headless=self.options.get("headless", True),
             channel="chrome",
-            args=["--disable-features=BlockThirdPartyCookies"],
+            args=[
+                "--disable-features=BlockThirdPartyCookies",
+                "--disable-dev-shm-usage",
+            ],
         )
 
     async def _scan_with_browser(self, browser: Any, url: str) -> dict[str, Any]:
@@ -153,13 +162,12 @@ class WebsiteScanner:
         final_response: Response | None,
         fallback_url: str,
     ) -> None:
-        await asyncio.sleep(5)
         await self.network_collector.wait_for_network_idle(data)
         self.network_collector.detach_page_logging(page, data)
         await self.network_collector.wait_for_event_tasks(data)
         await collect_storage(context, data)
         await store_final_response(result, data, final_response, page, fallback_url)
-        await run_extractors(extractors)
+        run_extractors(extractors)
         result["scan_end"] = utc_now_iso()
 
 
@@ -169,4 +177,3 @@ def scan_websites(
     max_concurrency: int = 1,
 ) -> list[dict[str, Any]]:
     return WebsiteScanner(options=options).scan(urls, max_concurrency=max_concurrency)
-

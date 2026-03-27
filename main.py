@@ -110,19 +110,11 @@ def main() -> None:
         "java_script_enabled": not args.disable_js,
     }
 
-    results = scan_websites(args.urls, options=options)
+    results = scan_websites(args.urls, options=options, max_concurrency=3)
     output_path = save_results(results)
-    result = results[0]
-    print(format_overview(result))
+    for result in results:
+        print(format_overview(result))
     print(f"Saved {len(results)} result(s) to {output_path}")
-    # print(format_requested_urls(result))
-    # print(json.dumps(result['facebook_pixel'], indent=2))
-    # print(json.dumps(result['third_parties'], indent=2))
-    # print(json.dumps(result["cookies"], indent=2))
-    # print(json.dumps(result["requests"], indent=2))
-    # print(json.dumps(result["fingerprinting"], indent=2))
-    print(json.dumps(result.get("trackers", []), indent=2))
-
 
 if __name__ == "__main__":
     main()
