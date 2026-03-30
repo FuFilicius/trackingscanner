@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any
 
-from playwright.async_api import Page, Request, Response
+from playwright.sync_api import Page, Request, Response
 
 from utils import (
     FailedRequestLogEntry,
@@ -27,10 +26,10 @@ class NetworkCollector:
     def register_page_logging(self, page: Page, data: ScanData) -> None:
         def on_request(request: Request) -> None:
             data.active_request_ids.add(request_id(request))
-            self._create_event_task(data, self._log_request(request, data))
+            self._log_request(request, data)
 
         def on_response(response: Response) -> None:
-            self._create_event_task(data, self._log_response(response, data))
+            self._log_response(response, data)
 
         def on_request_finished(request: Request) -> None:
             data.active_request_ids.discard(request_id(request))
@@ -67,7 +66,7 @@ class NetworkCollector:
             data.on_request_finished_handler = None
             data.on_request_failed_handler = None
 
-    async def wait_for_network_idle(self, data: ScanData) -> None:
+    def wait_for_network_idle(self, data: ScanData) -> None:
         idle_for_ms = int(self.options.get("network_idle_ms", 2000))
         max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 15000))
         poll_interval_ms = int(self.options.get("network_idle_poll_interval_ms", 200))
@@ -79,7 +78,6 @@ class NetworkCollector:
         idle_since_ms: int | None = None
 
         while int(time.monotonic() * 1000) < deadline_ms:
-            await self.wait_for_event_tasks(data)
             now_ms = int(time.monotonic() * 1000)
 
             if not data.active_request_ids:
@@ -90,21 +88,11 @@ class NetworkCollector:
             else:
                 idle_since_ms = None
 
-            await asyncio.sleep(poll_interval_ms / 1000)
+            data.page.wait_for_timeout(poll_interval_ms)
 
-    async def wait_for_event_tasks(self, data: ScanData) -> None:
-        while data.event_tasks:
-            pending_tasks = list(data.event_tasks)
-            await asyncio.gather(*pending_tasks, return_exceptions=True)
-
-    def _create_event_task(self, data: ScanData, coroutine: Any) -> None:
-        task = asyncio.create_task(coroutine)
-        data.event_tasks.add(task)
-        task.add_done_callback(data.event_tasks.discard)
-
-    async def _log_request(self, request: Request, data: ScanData) -> None:
+    def _log_request(self, request: Request, data: ScanData) -> None:
         event_request_id = request_id(request)
-        headers = await request.all_headers()
+        headers = request.all_headers()
         body, body_json = self._extract_post_body(request)
 
         request_entry = RequestLogEntry(
@@ -142,11 +130,11 @@ class NetworkCollector:
 
         return body, body_json
 
-    async def _log_response(self, response: Response, data: ScanData) -> None:
+    def _log_response(self, response: Response, data: ScanData) -> None:
         event_request_id = request_id(response.request)
-        headers = await response.all_headers()
+        headers = response.all_headers()
         try:
-            security_details = await response.security_details()
+            security_details = response.security_details()
         except Exception:
             security_details = None
 

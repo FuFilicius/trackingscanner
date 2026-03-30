@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import asyncio
-import inspect
 from dataclasses import asdict, field, dataclass
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlparse
 
-from playwright.async_api import BrowserContext, Page
+from playwright.sync_api import BrowserContext, Page
 from tldextract import TLDExtract
 
 
@@ -142,7 +140,7 @@ class ScanData:
     final_response: ResponseLogEntry | None = None
     local_storage: dict[str, Any] = field(default_factory=dict)
     local_storage_by_origin: list[dict[str, Any]] = field(default_factory=list)
-    event_tasks: set[asyncio.Task[Any]] = field(default_factory=set)
+    event_tasks: set[Any] = field(default_factory=set)
     on_request_handler: Any | None = None
     on_response_handler: Any | None = None
     on_request_finished_handler: Any | None = None

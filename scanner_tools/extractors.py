@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from playwright.async_api import BrowserContext
+from playwright.sync_api import BrowserContext
 
 from extractors import (
     CookiesExtractor,
@@ -90,12 +90,12 @@ def create_extractors(
     ]
 
 
-async def register_extractor_javascript(
+def register_extractor_javascript(
     context: BrowserContext,
     extractors: list[Extractor],
     scanner_init_script: str,
 ) -> None:
-    await context.add_init_script(script=scanner_init_script)
+    context.add_init_script(script=scanner_init_script)
 
     for extractor in extractors:
         scripts = extractor.register_javascript()
@@ -103,12 +103,12 @@ async def register_extractor_javascript(
             continue
 
         if isinstance(scripts, str):
-            await context.add_init_script(script=scripts)
+            context.add_init_script(script=scripts)
             continue
 
         for script in scripts:
             if script:
-                await context.add_init_script(script=script)
+                context.add_init_script(script=script)
 
 
 def run_extractors(extractors: list[Extractor]) -> None:

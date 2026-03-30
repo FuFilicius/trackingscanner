@@ -2,17 +2,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from playwright.async_api import BrowserContext, Page, Response
+from playwright.sync_api import BrowserContext, Page, Response
 
 from scanner_tools.network import request_id
 from utils import CookieEntry, ResponseLogEntry, ScanData, utc_now_iso
 
 
-async def collect_storage(context: BrowserContext, data: ScanData) -> None:
-    raw_cookies = await context.cookies()
+def collect_storage(context: BrowserContext, data: ScanData) -> None:
+    raw_cookies = context.cookies()
     data.cookies = [CookieEntry.from_playwright_cookie(dict(cookie)) for cookie in raw_cookies]
 
-    storage_state = await context.storage_state()
+    storage_state = context.storage_state()
     origins = storage_state.get("origins", [])
     data.local_storage_by_origin = [
         {
@@ -25,10 +25,10 @@ async def collect_storage(context: BrowserContext, data: ScanData) -> None:
     ]
 
 
-async def serialize_response(response: Response) -> ResponseLogEntry:
-    headers = await response.all_headers()
+def serialize_response(response: Response) -> ResponseLogEntry:
+    headers = response.all_headers()
     try:
-        security_details = await response.security_details()
+        security_details = response.security_details()
     except Exception:
         security_details = None
 
@@ -48,7 +48,7 @@ async def serialize_response(response: Response) -> ResponseLogEntry:
     )
 
 
-async def store_final_response(
+def store_final_response(
     result: dict[str, Any],
     data: ScanData,
     final_response: Response | None,
@@ -56,7 +56,7 @@ async def store_final_response(
     fallback_url: str,
 ) -> None:
     if final_response is not None:
-        data.final_response = await serialize_response(final_response)
+        data.final_response = serialize_response(final_response)
         result["final_response"] = data.final_response.to_dict()
         result["final_url"] = final_response.url
         return
