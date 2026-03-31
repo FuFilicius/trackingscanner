@@ -71,6 +71,7 @@ def format_overview(result: dict) -> str:
         f"- Site URL: {result.get('site_url', '-')}",
         f"- Final URL: {result.get('final_url', '-')}",
         f"- Reachable: {result.get('reachable', False)}",
+        f"- Network idle max wait exceeded: {result.get('network_idle_max_wait_exceeded', False)}",
         f"- Status: {final_response.get('status', '-')}",
         f"- Requests: {request_count}",
         f"- Requests setting cookies: {set_cookie_count}",

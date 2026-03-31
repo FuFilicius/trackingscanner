@@ -66,13 +66,13 @@ class NetworkCollector:
             data.on_request_finished_handler = None
             data.on_request_failed_handler = None
 
-    def wait_for_network_idle(self, data: ScanData) -> None:
-        idle_for_ms = int(self.options.get("network_idle_ms", 2000))
-        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 15000))
-        poll_interval_ms = int(self.options.get("network_idle_poll_interval_ms", 200))
+    def wait_for_network_idle(self, data: ScanData) -> bool:
+        idle_for_ms = int(self.options.get("network_idle_ms", 5000))
+        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 30000))
+        poll_interval_ms = int(self.options.get("network_idle_poll_interval_ms", 250))
 
         if idle_for_ms <= 0:
-            return
+            return False
 
         deadline_ms = int(time.monotonic() * 1000) + max_wait_ms
         idle_since_ms: int | None = None
@@ -84,11 +84,13 @@ class NetworkCollector:
                 if idle_since_ms is None:
                     idle_since_ms = now_ms
                 elif now_ms - idle_since_ms >= idle_for_ms:
-                    return
+                    return False
             else:
                 idle_since_ms = None
 
             data.page.wait_for_timeout(poll_interval_ms)
+
+        return True
 
     def _log_request(self, request: Request, data: ScanData) -> None:
         event_request_id = request_id(request)

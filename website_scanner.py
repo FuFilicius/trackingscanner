@@ -128,7 +128,9 @@ class WebsiteScanner:
         final_response: Response | None,
         fallback_url: str,
     ) -> None:
-        self.network_collector.wait_for_network_idle(data)
+        max_wait_exceeded = self.network_collector.wait_for_network_idle(data)
+        if max_wait_exceeded:
+            result["network_idle_max_wait_exceeded"] = True
         self.network_collector.detach_page_logging(page, data)
         collect_storage(context, data)
         store_final_response(result, data, final_response, page, fallback_url)

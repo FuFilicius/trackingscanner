@@ -1,9 +1,17 @@
 #!/usr/bin/env sh
 set -eu
 
-if printf '%s\n' " $* " | grep -q ' --headed '; then
+headed=0
+for arg in "$@"; do
+  if [ "$arg" = "--headed" ]; then
+    headed=1
+    break
+  fi
+done
+
+if [ "$headed" -eq 1 ]; then
   export DISPLAY=:99
-  Xvfb :99 -screen 0 1920x1080x24 &
+  Xvfb :99 -screen 0 1920x1080x24 -nolisten tcp &
   xvfb_pid=$!
 
   cleanup() {
@@ -11,8 +19,9 @@ if printf '%s\n' " $* " | grep -q ' --headed '; then
   }
   trap cleanup EXIT INT TERM
 
-  exec python -u main.py "$@"
-  # exec xvfb-run -a -s "-screen 0 1920x1080x24" python main.py "$@"
-else
-  exec python -u main.py "$@"
+  python -u main.py "$@"
+  exit_code=$?
+  exit "$exit_code"
 fi
+
+exec python -u main.py "$@"
