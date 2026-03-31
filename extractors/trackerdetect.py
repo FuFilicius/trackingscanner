@@ -21,8 +21,13 @@ class TrackerExtractor(Extractor):
 	def extract_information(self):
 		self._load_rules()
 
-		trackers_fqdn, trackers_domain, num_tracker_requests = self._tag_tracker_requests()
-		num_tracker_cookies, tracker_cookie_domains = self._tag_tracker_cookies(
+		(
+			trackers_fqdn,
+			trackers_domain,
+			num_tracker_requests,
+			tracker_request_counts_by_fqdn,
+		) = self._tag_tracker_requests()
+		num_tracker_cookies, tracker_cookie_domains, tracker_cookie_counts_by_fqdn = self._tag_tracker_cookies(
 			trackers_fqdn,
 			trackers_domain,
 		)
@@ -30,15 +35,18 @@ class TrackerExtractor(Extractor):
 		self.result["trackers"] = {
 			"trackers": sorted(trackers_fqdn),
 			"num_tracker_requests": num_tracker_requests,
+			"tracker_request_counts_by_fqdn": tracker_request_counts_by_fqdn,
 			"num_tracker_cookies": num_tracker_cookies,
 			"tracker_cookie_domains": sorted(tracker_cookie_domains),
+			"tracker_cookie_counts_by_fqdn": tracker_cookie_counts_by_fqdn,
 		}
 
-	def _tag_tracker_requests(self) -> tuple[set[str], set[str], int]:
+	def _tag_tracker_requests(self) -> tuple[set[str], set[str], int, dict[str, int]]:
 		trackers_fqdn: set[str] = set()
 		trackers_domain: set[str] = set()
 		blacklist: set[str] = set()
 		num_tracker_requests = 0
+		tracker_request_counts_by_fqdn: dict[str, int] = {}
 
 		for request in self.data.request_log.values():
 			request.is_tracker = False
@@ -61,21 +69,25 @@ class TrackerExtractor(Extractor):
 			extracted = parse_domain(request.url)
 			if extracted.fqdn:
 				trackers_fqdn.add(extracted.fqdn)
+				tracker_request_counts_by_fqdn[extracted.fqdn] = (
+					tracker_request_counts_by_fqdn.get(extracted.fqdn, 0) + 1
+				)
 			if extracted.top_domain_under_public_suffix:
 				trackers_domain.add(extracted.top_domain_under_public_suffix)
 			num_tracker_requests += 1
 			if netloc:
 				blacklist.add(netloc)
 
-		return trackers_fqdn, trackers_domain, num_tracker_requests
+		return trackers_fqdn, trackers_domain, num_tracker_requests, tracker_request_counts_by_fqdn
 
 	def _tag_tracker_cookies(
 		self,
 		trackers_fqdn: set[str],
 		trackers_domain: set[str],
-	) -> tuple[int, set[str]]:
+	) -> tuple[int, set[str], dict[str, int]]:
 		num_tracker_cookies = 0
 		tracker_cookie_domains: set[str] = set()
+		tracker_cookie_counts_by_fqdn: dict[str, int] = {}
 
 		for cookie in self.data.cookies:
 			domain = cookie.domain or ""
@@ -95,8 +107,12 @@ class TrackerExtractor(Extractor):
 				num_tracker_cookies += 1
 				if normalized_domain:
 					tracker_cookie_domains.add(normalized_domain)
+					cookie_fqdn = parse_domain(normalized_domain).fqdn or normalized_domain
+					tracker_cookie_counts_by_fqdn[cookie_fqdn] = (
+						tracker_cookie_counts_by_fqdn.get(cookie_fqdn, 0) + 1
+					)
 
-		return num_tracker_cookies, tracker_cookie_domains
+		return num_tracker_cookies, tracker_cookie_domains, tracker_cookie_counts_by_fqdn
 
 	def _matches_tracker_rule(self, request_url: str, document_url: str | None) -> bool:
 		if self.rules is None:

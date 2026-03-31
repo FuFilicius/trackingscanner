@@ -1,5 +1,5 @@
 from extractors.base import Extractor
-from utils import get_corresponding_response
+from utils import get_corresponding_response, parse_domain
 
 
 class RequestsExtractor(Extractor):
@@ -11,11 +11,15 @@ class RequestsExtractor(Extractor):
             "methods": {},
             "resource_types": {},
             "status_classes": {},
+            "counts_by_fqdn": {},
         }
 
         for request in self.data.request_log.values():
             summary["total"] += 1
             response = get_corresponding_response(request.request_id, self.data)
+
+            fqdn = parse_domain(request.url).fqdn or (request.parsed_url.hostname or "unknown")
+            self._increase_counter(summary["counts_by_fqdn"], fqdn)
 
 
             self._increase_counter(summary["methods"], request.method)

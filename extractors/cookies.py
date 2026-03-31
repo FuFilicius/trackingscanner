@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
 from extractors.base import Extractor
+from utils import parse_domain
 
 
 class CookiesExtractor(Extractor):
@@ -19,6 +20,7 @@ class CookiesExtractor(Extractor):
             "thirdparty": 0,
             "tracker": 0,
             "same_site": {},
+            "counts_by_fqdn": {},
         }
         lifetime_sum = 0
         persistent_count = 0
@@ -50,5 +52,11 @@ class CookiesExtractor(Extractor):
 
             same_site = cookie.same_site or "unknown"
             summary["same_site"][same_site] = summary["same_site"].get(same_site, 0) + 1
+
+            domain = cookie.domain or ""
+            normalized_domain = domain[1:] if domain.startswith(".") else domain
+            cookie_fqdn = parse_domain(normalized_domain).fqdn if normalized_domain else ""
+            key = cookie_fqdn or normalized_domain or "unknown"
+            summary["counts_by_fqdn"][key] = summary["counts_by_fqdn"].get(key, 0) + 1
 
         self.result["cookies"] = summary

@@ -110,7 +110,12 @@ def main() -> None:
         "java_script_enabled": not args.disable_js,
     }
 
-    results = scan_websites(args.urls, options=options, max_concurrency=3)
+    results = scan_websites(
+        args.urls,
+        options=options,
+        max_concurrency=min(3, len(args.urls)),
+    )
+
     output_path = save_results(results)
     for result in results:
         print(format_overview(result))
