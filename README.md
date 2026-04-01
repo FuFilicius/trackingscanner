@@ -119,6 +119,7 @@ The CLI also prints a short per-site overview to stdout.
 ## Notes
 
 - If you place a Chrome package like `browsers/google-chrome-stable_<version>_amd64.deb` in the repo, the Docker build installs that file first.
+- The Chrome package used for testing is `google-chrome-stable_144.0.7559.132-1_amd64.deb`.
 - If no local `.deb` exists, the Docker build installs `google-chrome-stable` from apt.
 - In Docker, scans run through `xvfb` (`docker-entrypoint.sh`).
 - The default compose setup mounts host `./test-results` to container `/app/test-results`, so results persist on your machine.

@@ -6,17 +6,22 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY browsers/ /tmp/browsers/
-
-# Install Chrome and runtime libraries required by Playwright/Chromium.
+# Install runtime libraries and configure the Chrome apt repository.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends ca-certificates gnupg wget xvfb xauth \
     && wget -qO- https://dl.google.com/linux/linux_signing_key.pub | gpg --dearmor > /usr/share/keyrings/google-linux.gpg \
     && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/google-linux.gpg] http://dl.google.com/linux/chrome/deb/ stable main" > /etc/apt/sources.list.d/google-chrome.list \
-    && apt-get update \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY browsers/ /tmp/browsers/
+
+# Install Chrome from local package when present; otherwise use apt repository.
+RUN apt-get update \
     && if ls /tmp/browsers/google-chrome-stable_*_amd64.deb >/dev/null 2>&1; then \
+        echo "Installing Google Chrome from local package..."; \
         apt-get install -y --no-install-recommends /tmp/browsers/google-chrome-stable_*_amd64.deb; \
     else \
+        echo "Installing Google Chrome from apt repository..."; \
         apt-get install -y --no-install-recommends google-chrome-stable; \
     fi \
     && rm -rf /var/lib/apt/lists/* /tmp/browsers
