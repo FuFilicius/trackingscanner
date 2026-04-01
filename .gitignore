@@ -24,6 +24,9 @@ htmlcov/
 playwright-report/
 test-results/
 
+# Browsers
+browsers/
+
 # Environment files
 .env
 .env.*
