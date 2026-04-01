@@ -122,3 +122,7 @@ The CLI also prints a short per-site overview to stdout.
 - If no local `.deb` exists, the Docker build installs `google-chrome-stable` from apt.
 - In Docker, scans run through `xvfb` (`docker-entrypoint.sh`).
 - The default compose setup mounts host `./test-results` to container `/app/test-results`, so results persist on your machine.
+
+## Credits
+
+The extractor logic is adapted from work by [The Markup Blacklight](https://themarkup.org/blacklight) and [privacyscanner-master](https://github.com/ronghaopan/privacyscanner-master).
