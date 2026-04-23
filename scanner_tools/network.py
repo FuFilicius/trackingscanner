@@ -67,8 +67,8 @@ class NetworkCollector:
             data.on_request_failed_handler = None
 
     def wait_for_network_idle(self, data: ScanData) -> bool:
-        idle_for_ms = int(self.options.get("network_idle_ms", 5000))
-        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 30000))
+        idle_for_ms = int(self.options.get("network_idle_ms", 3000))
+        max_wait_ms = int(self.options.get("network_idle_max_wait_ms", 20000))
         poll_interval_ms = int(self.options.get("network_idle_poll_interval_ms", 250))
 
         if idle_for_ms <= 0:

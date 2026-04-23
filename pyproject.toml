@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "trackingscanner"
+version = "0.1.0"
+description = "Playwright-based website tracking scanner"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright==1.58.0",
+    "tldextract==5.3.1",
+    "adblockparser==0.7",
+]
+
+[tool.setuptools]
+packages = ["trackingscanner", "extractors", "scanner_tools"]
+py-modules = ["main", "scanner", "scan_master", "scan_worker", "scan_job", "website_scanner", "utils"]

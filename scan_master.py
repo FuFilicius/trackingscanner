@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import multiprocessing as mp
 import queue
+from collections.abc import Iterable
 from typing import Any
 
 from scan_worker import ScanWorker
@@ -20,6 +21,10 @@ class ScanMaster:
         self._queued_jobs = 0
         self._received_jobs = 0
         self._next_job_id = 0
+
+    @property
+    def started(self) -> bool:
+        return self._started
 
     def start(self) -> None:
         if self._started:
@@ -49,6 +54,11 @@ class ScanMaster:
         self._next_job_id = max(self._next_job_id, current_job_id + 1)
         return current_job_id
 
+    def queue_urls(self, urls: Iterable[str]) -> list[int]:
+        if isinstance(urls, str):
+            raise TypeError("urls must be an iterable of URL strings, not a single string")
+        return [self.queue_url(url) for url in urls]
+
     def get_result(self, timeout: float = 0.5) -> tuple[int, dict[str, Any]] | None:
         if not self._started:
             raise RuntimeError("ScanMaster must be started before reading results")
@@ -68,6 +78,13 @@ class ScanMaster:
 
     def request_stop(self) -> None:
         self.stop_event.set()
+
+    def stop(self) -> None:
+        self.request_stop()
+        self.end()
+
+    def close(self) -> None:
+        self.stop()
 
     def end(self) -> None:
         if not self._started:
@@ -92,4 +109,11 @@ class ScanMaster:
         self.task_queue.close()
         self.result_queue.close()
         self._started = False
+
+    def __enter__(self) -> "ScanMaster":
+        self.start()
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+        self.stop()
 

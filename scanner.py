@@ -8,7 +8,7 @@ from scan_worker import ScanWorker
 from website_scanner import WebsiteScanner
 
 
-def scan_websites(
+def scan(
     urls: list[str],
     options: dict[str, Any] | None = None,
     max_concurrency: int = 1,
@@ -57,10 +57,18 @@ def scan_websites(
     return final_results
 
 
+def create_scan_master(
+    options: dict[str, Any] | None = None,
+    worker_count: int = 1,
+) -> ScanMaster:
+    return ScanMaster(options=options or {}, worker_count=worker_count)
+
+
 __all__ = [
     "ScanJob",
     "ScanMaster",
     "ScanWorker",
     "WebsiteScanner",
-    "scan_websites",
+    "create_scan_master",
+    "scan",
 ]

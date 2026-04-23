@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from playwright.sync_api import Browser, BrowserContext, Page, Response
 
 from extractors.base import Extractor
+from scanner_tools.cmp import CMPInteractor
 from scanner_tools.finalize import collect_storage, store_final_response
 from scanner_tools.network import NetworkCollector
+from scanner_tools.results import ScanResult
 from scanner_tools.extractors import (
     EXTRACTOR_CLASSES,
     SCANNER_INIT_SCRIPT,
@@ -22,10 +25,11 @@ class WebsiteScanner:
         self.options = options or {}
         self.extractor_classes = EXTRACTOR_CLASSES
         self.network_collector = NetworkCollector(self.options)
+        self.cmp_interactor = CMPInteractor(self.options)
 
     def launch_browser(self, playwright: Any) -> Browser:
         return playwright.chromium.launch(
-            headless=self.options.get("headless", True),
+            headless=self.options.get("headless", False),
             channel="chrome",
             args=[
                 "--disable-features=BlockThirdPartyCookies",
@@ -34,7 +38,7 @@ class WebsiteScanner:
         )
 
     def scan_one_url_with_browser(self, url: str, browser: Browser) -> dict[str, Any]:
-        result = self._initial_result(url)
+        result = ScanResult(site_url=url)
         context: BrowserContext | None = None
         page: Page | None = None
         data: ScanData | None = None
@@ -43,45 +47,65 @@ class WebsiteScanner:
             context = self._create_context(browser)
             page = context.new_page()
             data = ScanData(page=page, context=context)
-            extractor_instances = create_extractors(
-                self.extractor_classes, result, self.options, data
-            )
+            script_extractors = create_extractors(self.extractor_classes, {}, self.options, data)
 
-            self._prepare_page(context, page, data, extractor_instances)
+            self._prepare_page(context, page, data, script_extractors)
             final_response = self._navigate(page, url, result)
-            self._finalize_scan(
+            before_accept_result, before_accept_data = self._capture_phase_result(
                 context=context,
                 page=page,
                 data=data,
-                result=result,
-                extractors=extractor_instances,
                 final_response=final_response,
                 fallback_url=url,
+                base_result=result,
+                wait_for_network_idle=True,
             )
+
+            cmp_result = self.cmp_interactor.try_accept(page)
+            result.cmp = cmp_result.to_dict()
+            cmp_enabled = self.cmp_interactor.enabled
+
+            self._run_extractors_for_phase(before_accept_result, before_accept_data)
+            result.before_accept = deepcopy(before_accept_result)
+
+            if not cmp_enabled:
+                result.after_accept = {}
+                result.scan_end = utc_now_iso()
+                return result.to_dict()
+
+            if cmp_result.accept_clicked and cmp_result.wait_after_click_ms > 0:
+                page.wait_for_timeout(cmp_result.wait_after_click_ms)
+
+            after_final_response = None
+            if final_response is not None and final_response.url == page.url:
+                after_final_response = final_response
+
+            after_accept_result, after_accept_data = self._capture_phase_result(
+                context=context,
+                page=page,
+                data=data,
+                final_response=after_final_response,
+                fallback_url=url,
+                base_result=result,
+                wait_for_network_idle=True,
+            )
+            self._run_extractors_for_phase(after_accept_result, after_accept_data)
+            result.after_accept = deepcopy(after_accept_result)
+            result.scan_end = utc_now_iso()
         except Exception as exc:
-            result["error"] = str(exc)
-            if "scan_end" not in result:
-                result["scan_end"] = utc_now_iso()
+            result.error = str(exc)
+            if result.scan_end is None:
+                result.scan_end = utc_now_iso()
         finally:
             if page is not None and data is not None:
                 self.network_collector.detach_page_logging(page, data)
             if context is not None:
                 context.close()
 
-        return result
+        return result.to_dict()
 
     def failed_result(self, url: str, error: str) -> dict[str, Any]:
-        result = self._initial_result(url)
-        result["error"] = error
-        result["scan_end"] = utc_now_iso()
-        return result
-
-    def _initial_result(self, url: str) -> dict[str, Any]:
-        return {
-            "site_url": url,
-            "scan_start": utc_now_iso(),
-            "reachable": False,
-        }
+        return ScanResult.failed(url, error)
 
     def _create_context(self, browser: Browser) -> BrowserContext:
         return browser.new_context(
@@ -105,35 +129,70 @@ class WebsiteScanner:
         self.network_collector.register_page_logging(page, data)
         register_extractor_javascript(context, extractors, SCANNER_INIT_SCRIPT)
 
-    def _navigate(self, page: Page, url: str, result: dict[str, Any]) -> Response | None:
+    def _navigate(self, page: Page, url: str, result: ScanResult) -> Response | None:
         try:
             response = page.goto(
                 url,
                 wait_until=self.options.get("wait_until", "domcontentloaded"),
                 timeout=self.options.get("timeout", 30000),
             )
-            result["reachable"] = True
+            result.reachable = True
             return response
         except Exception as exc:
-            result["error"] = str(exc)
+            result.error = str(exc)
             return None
 
-    def _finalize_scan(
+    def _capture_phase_result(
         self,
         context: BrowserContext,
         page: Page,
         data: ScanData,
-        result: dict[str, Any],
-        extractors: list[Extractor],
         final_response: Response | None,
         fallback_url: str,
-    ) -> None:
-        max_wait_exceeded = self.network_collector.wait_for_network_idle(data)
-        if max_wait_exceeded:
-            result["network_idle_max_wait_exceeded"] = True
-        self.network_collector.detach_page_logging(page, data)
+        base_result: ScanResult,
+        wait_for_network_idle: bool,
+    ) -> tuple[dict[str, Any], ScanData]:
+        phase_result: dict[str, Any] = {
+            "site_url": base_result.site_url,
+            "scan_start": base_result.scan_start,
+            "reachable": base_result.reachable,
+        }
+
+        if wait_for_network_idle:
+            max_wait_exceeded = self.network_collector.wait_for_network_idle(data)
+        else:
+            max_wait_exceeded = False
+        phase_result["network_idle_max_wait_exceeded"] = max_wait_exceeded
         collect_storage(context, data)
-        store_final_response(result, data, final_response, page, fallback_url)
+        phase_data = self._snapshot_scan_data(data)
+        store_final_response(phase_result, phase_data, final_response, page, fallback_url)
+        return phase_result, phase_data
+
+    def _run_extractors_for_phase(
+        self,
+        phase_result: dict[str, Any],
+        phase_data: ScanData,
+    ) -> None:
+        extractors = create_extractors(self.extractor_classes, phase_result, self.options, phase_data)
         run_extractors(extractors)
-        result["scan_end"] = utc_now_iso()
+
+    @staticmethod
+    def _snapshot_scan_data(data: ScanData) -> ScanData:
+        return ScanData(
+            page=data.page,
+            context=data.context,
+            request_log=deepcopy(data.request_log),
+            response_log=deepcopy(data.response_log),
+            failed_request_log=deepcopy(data.failed_request_log),
+            cookies=deepcopy(data.cookies),
+            final_response=deepcopy(data.final_response),
+            local_storage=deepcopy(data.local_storage),
+            local_storage_by_origin=deepcopy(data.local_storage_by_origin),
+            event_tasks=set(),
+            on_request_handler=None,
+            on_response_handler=None,
+            on_request_finished_handler=None,
+            on_request_failed_handler=None,
+            active_request_ids=set(data.active_request_ids),
+        )
 
