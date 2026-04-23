@@ -69,6 +69,7 @@ CLI options:
 - `--strict-https` - do not ignore TLS certificate errors
 - `--disable-js` - disable JavaScript in the browser context
 - `--without-cmp` (alias: `--without-cmp-interaction`) - skip cookie/CMP auto-accept interaction
+- `--log-scan-timings` - print timing logs for CMP interaction and extractor steps
 
 Example:
 
@@ -80,6 +81,12 @@ Disable CMP interaction:
 
 ```powershell
 python main.py https://example.com --without-cmp
+```
+
+Enable step timing logs:
+
+```powershell
+python main.py https://example.com --log-scan-timings
 ```
 
 ## Use as a module in another project
@@ -135,6 +142,7 @@ Additional programmatic scan options:
 - `cmp_pre_click_wait_ms` (default: `750`) - wait after initial load before trying consent interaction.
 - `cmp_click_timeout_ms` (default: `1000`) - per-click timeout while trying candidate accept elements.
 - `cmp_wait_after_click_ms` (default: `1000`) - wait after a successful click to allow additional tracking activity.
+- `log_scan_timings` (default: `False`) - print timing logs for `cmp_try_accept`, `extract_before`, and (if applicable) `extract_after`.
 - CMP matching uses normalized exact text matching from `accept_words.txt` (not substring matching).
 
 ## Concurrency behavior
@@ -174,7 +182,7 @@ Top-level result keys include:
 
 - `site_url`, `scan_start`, `scan_end`, `reachable`
 - `cmp` (interaction metadata: clicked text/selector/frame/strategy and matched accept word)
-- `before_accept` and `after_accept` (full extractor outputs for each phase)
+- `before_accept` (full extractor output before CMP interaction) and `after_accept` (only populated when an accept click succeeds)
 - `final_url`, `final_response`
 - `requests`, `failed_requests`, `cookies`
 - extractor-specific fields (for trackers, third parties, pixels, session recorders, fingerprinting, etc.)

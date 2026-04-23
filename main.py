@@ -47,6 +47,11 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Do not try to interact with cookie/CMP accept banners.",
     )
+    parser.add_argument(
+        "--log-scan-timings",
+        action="store_true",
+        help="Print simple start timestamps for CMP interaction and extractor steps.",
+    )
     return parser.parse_args()
 
 
@@ -137,6 +142,7 @@ def main() -> None:
         "ignore_https_errors": not args.strict_https,
         "java_script_enabled": not args.disable_js,
         "cmp_auto_accept": not args.without_cmp,
+        "log_scan_timings": args.log_scan_timings,
     }
 
     results = scan(
