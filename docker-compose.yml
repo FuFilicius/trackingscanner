@@ -1,0 +1,8 @@
+services:
+  scanner:
+    platform: linux/amd64
+    build:
+      context: .
+    image: website-scanner:latest
+    volumes:
+      - ./test-results:/app/test-results

@@ -1,0 +1,185 @@
+from __future__ import annotations
+
+import argparse
+import json
+from datetime import datetime, timezone
+from pathlib import Path
+
+from scanner_tools.results import ScanResultPayload, ScanResultsByUrl
+from trackingscanner import scan
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run website scans with Playwright.")
+    parser.add_argument(
+        "urls",
+        nargs="+",
+        help=(
+            "One or more target URLs/domains to scan; "
+            "domains without scheme default to https://"
+        ),
+    )
+    parser.add_argument(
+        "--headed",
+        action="store_true",
+        help="Run Chromium with a visible window (headless disabled).",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=30000,
+        help="Navigation timeout in milliseconds (default: 30000).",
+    )
+    parser.add_argument(
+        "--wait-until",
+        default="domcontentloaded",
+        choices=["load", "domcontentloaded", "networkidle", "commit"],
+        help="Playwright wait condition for page.goto().",
+    )
+    parser.add_argument(
+        "--strict-https",
+        action="store_true",
+        help="Do not ignore HTTPS certificate errors.",
+    )
+    parser.add_argument(
+        "--disable-js",
+        action="store_true",
+        help="Disable JavaScript in the browser context.",
+    )
+    parser.add_argument(
+        "--without-cmp",
+        action="store_true",
+        help="Do not try to interact with cookie/CMP accept banners.",
+    )
+    parser.add_argument(
+        "--log-scan-timings",
+        action="store_true",
+        help="Print simple start timestamps for CMP interaction and extractor steps.",
+    )
+    parser.add_argument(
+        "--screenshots",
+        action="store_true",
+        help="Capture before/after consent phase screenshots to --screenshots-dir.",
+    )
+    parser.add_argument(
+        "--screenshots-dir",
+        default="",
+        help="Directory to write screenshots when --screenshots is enabled.",
+    )
+    return parser.parse_args()
+
+
+def format_overview(result: ScanResultPayload) -> str:
+    final_response = result.get("final_response") or {}
+    cmp_result = result.get("cmp") or {}
+    local_storage_by_origin = result.get("local_storage_by_origin") or []
+    has_local_storage = "local_storage_by_origin" in result
+    local_storage_key_count = 0
+    for origin_entry in local_storage_by_origin:
+        if not isinstance(origin_entry, dict):
+            continue
+        local_storage = origin_entry.get("local_storage")
+        if isinstance(local_storage, dict):
+            local_storage_key_count += len(local_storage)
+
+    requests_value = result.get("requests")
+    if isinstance(requests_value, dict):
+        request_count = requests_value.get("total", 0)
+        set_cookie_count = requests_value.get("set_cookie", 0)
+    else:
+        request_count = len(requests_value or [])
+        set_cookie_count = 0
+
+    before_requests = ((result.get("before_accept") or {}).get("requests") or {}).get(
+        "total", request_count
+    )
+    after_requests = ((result.get("after_accept") or {}).get("requests") or {}).get(
+        "total", request_count
+    )
+
+    cookies_value = result.get("cookies")
+    if isinstance(cookies_value, dict):
+        cookie_count = cookies_value.get("total", 0)
+        session_cookie_count = cookies_value.get("session", 0)
+        persistent_cookie_count = cookies_value.get("persistent", 0)
+    else:
+        cookie_count = len(cookies_value or [])
+        session_cookie_count = 0
+        persistent_cookie_count = 0
+
+    failed_requests_value = result.get("failed_requests")
+    if isinstance(failed_requests_value, dict):
+        failed_request_count = int(failed_requests_value.get("total", 0))
+    else:
+        failed_request_count = (
+            ((result.get("before_accept") or {}).get("failed_requests") or {}).get("total", 0)
+        )
+
+    lines = [
+        "Scan overview",
+        f"- Site URL: {result.get('site_url', '-')}",
+        f"- Final URL: {result.get('final_url', '-')}",
+        f"- Reachable: {result.get('reachable', False)}",
+        f"- CMP accept clicked: {cmp_result.get('accept_clicked', False)}",
+        f"- Network idle max wait exceeded: {result.get('network_idle_max_wait_exceeded', False)}",
+        f"- Status: {final_response.get('status', '-')}",
+        f"- Requests: {request_count}",
+        f"- Requests before accept: {before_requests}",
+        f"- Requests after accept: {after_requests}",
+        f"- Requests setting cookies: {set_cookie_count}",
+        f"- Failed requests: {failed_request_count}",
+        f"- Cookies: {cookie_count}",
+        f"- Session cookies: {session_cookie_count}",
+        f"- Persistent cookies: {persistent_cookie_count}",
+        f"- Started: {result.get('scan_start', '-')}",
+        f"- Finished: {result.get('scan_end', '-')}",
+    ]
+
+    if has_local_storage:
+        lines.insert(-2, f"- Local storage keys: {local_storage_key_count}")
+
+    error = result.get("error")
+    if error:
+        lines.append(f"- Error: {error}")
+
+    return "\n".join(lines)
+
+
+def save_results(results: ScanResultsByUrl) -> Path:
+    output_dir = Path("test-results")
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    output_path = output_dir / f"scan_results_{timestamp}.json"
+    output_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
+    return output_path
+
+
+def main() -> None:
+    args = parse_args()
+    options = {
+        "headless": not args.headed,
+        "timeout": args.timeout,
+        "wait_until": args.wait_until,
+        "ignore_https_errors": not args.strict_https,
+        "java_script_enabled": not args.disable_js,
+        "cmp_auto_accept": not args.without_cmp,
+        "log_scan_timings": args.log_scan_timings,
+        "screenshots_enabled": args.screenshots,
+        "screenshot_dir": args.screenshots_dir or None,
+    }
+
+    results = scan(
+        args.urls,
+        options=options,
+        max_concurrency=min(3, len(args.urls)),
+    )
+
+    output_path = save_results(results)
+    for result in results.values():
+        print(format_overview(result))
+    print(f"Saved {len(results)} result(s) to {output_path}")
+
+if __name__ == "__main__":
+    main()
+

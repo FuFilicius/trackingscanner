@@ -1,0 +1,18 @@
+.git/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+env/
+
+.env
+.env.*
+*.log
+
+test-results/
+screenshots/
+
+# Do not send the optional local Chrome package to Docker by default.
+browsers/*.deb
